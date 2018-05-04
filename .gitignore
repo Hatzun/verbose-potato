@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+ProductScreener.xls
+etf_navs
+get_ishare.ipynb
+get_spdr_etfs.ipynb
+get_spdr_page.py
+ishare_links.xlsx
+ishares
+ishares_edgar.xlsx
+spdr_etfPerformance.xls
+.idea
+.ipynb_checkpoints
