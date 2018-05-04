@@ -19,3 +19,30 @@ ishares <- read_excel("raws/ishares.xls")
 ishares
 ```
 
+isolate them and conver to a mappable list structure
+
+```{r}
+names <- ishares %>% 
+  select(Name) %>% 
+  pull() %>% 
+  str_to_lower() %>% 
+  str_replace_all(" ", "-")
+
+names[1:3]
+```
+
+
+```{r}
+etf_xls <- read_excel("ishares/ishares-adaptive-currency-hedged-msci-eafe-etf.xlsx", sheet = "Holdings", skip = 8)
+etf_xls
+```
+
+create the function to extract holdings
+
+```{r}
+importholdingclean <- function(name) {
+  #take the name and apply the 
+}
+```
+
+
