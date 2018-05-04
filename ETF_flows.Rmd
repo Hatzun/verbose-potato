@@ -1,5 +1,5 @@
 ---
-title: "ETF flows"
+title: "SPDR_nav_history_import"
 output: html_notebook
 ---
 
@@ -11,13 +11,14 @@ library(stringr)
 ```
 
 
-```{r import}
+```{r test_import, warning=FALSE}
 ACIM <- read_excel("etf_navs/ACIM.xls", skip = 3)
 ACIM
 ```
+
 There are several lines at the bottom for the disclaimers and legal information, we will remove those, and then format the columns into the correct type, date and numeric.
 
-```{r}
+```{r clean}
 ACIM <- ACIM %>% 
   select(1:4) %>% 
   filter(!is.na(Nav)) %>% 
@@ -64,23 +65,27 @@ importclean <- function(ticker) {
 
 Test the function out real quick
 
-```{r test}
-test = importclean('ACIM')
-test
+```{r test, warning=FALSE}
+importclean('ACIM')
 ```
 
 works perfectly
 
-```{r import_all}
+```{r import_all, message=FALSE, warning=FALSE}
 spdr_history <- spdr_tickers %>%
   pull(TICKER) %>% 
   map(~importclean(.x))
 ```
 
+Unnest the nav history rows to match the ticker variable column to make tidy data
+
 ```{r}
 spdr_total <- add_column(spdr_tickers, history = spdr_history) %>% 
   unnest(history)
 ```
+
+now there are a total of: `r nrow(spdr_total)` rows
+
 
 ```{r}
 spdr_total %>% 
@@ -88,22 +93,5 @@ spdr_total %>%
   top_n(5, Date)
 ```
 
-```{r import_function}
-importholdingclean <- function(ticker) {
-  #combine ticker and location string to create location
-  location <- str_interp("etf_navs/${ticker}.xls")
-  
-  #uses the location to read the excel file in the folder
-  xls_file <- read_excel(location,skip = 3)
-  
-  #cleans the data, removes the disclaimers at the end and converts to numeric
-  xls_file <- xls_file %>% 
-    select(1:4) %>% 
-    filter(!is.na(Nav)) %>% 
-    mutate(Date = dmy(Date)) %>% 
-    modify_at(2:4, as.numeric)
-  
-  return(xls_file)
-}
-```
+
 
