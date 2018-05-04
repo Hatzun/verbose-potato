@@ -13,4 +13,4 @@ ishares_edgar.xlsx
 spdr_etfPerformance.xls
 .idea
 .ipynb_checkpoints
-ETF_flows.nb.html
+*.nb.html

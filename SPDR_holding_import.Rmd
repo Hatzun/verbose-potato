@@ -1,0 +1,23 @@
+---
+title: "SPDR_holdings_import"
+output: html_notebook
+---
+
+```{r import_holding_function}
+importholdingclean <- function(ticker) {
+  #combine ticker and location string to create location
+  location <- str_interp("etf_navs/${ticker}.xls")
+  
+  #uses the location to read the excel file in the folder
+  xls_file <- read_excel(location,skip = 3)
+  
+  #cleans the data, removes the disclaimers at the end and converts to numeric
+  xls_file <- xls_file %>% 
+    select(1:4) %>% 
+    filter(!is.na(Nav)) %>% 
+    mutate(Date = dmy(Date)) %>% 
+    modify_at(2:4, as.numeric)
+  
+  return(xls_file)
+}
+```
