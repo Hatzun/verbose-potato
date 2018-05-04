@@ -36,7 +36,7 @@ ACIM %>%
 Now we will try to produce a function that imports and cleans all the SPDR etf xls files and combine them. First get all the tickers from the xls and use that retrieve the files.
 
 ```{r get_spdr_tickers}
-spdr_tickers <- read_excel('spdr_etfPerformance.xls', range = cell_cols("B")) %>% 
+spdr_tickers <- read_excel('raws/spdr_etfPerformance.xls', range = cell_cols("B")) %>% 
   filter(!is.na(TICKER)) 
   
 spdr_tickers
@@ -93,5 +93,11 @@ spdr_total %>%
   top_n(5, Date)
 ```
 
+Output the cleaned data and we are done here!
+
+```{r}
+library(feather)
+write_feather(spdr_total, 'spdr_nav.feather')
+```
 
 
