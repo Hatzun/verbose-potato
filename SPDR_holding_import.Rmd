@@ -3,6 +3,16 @@ title: "SPDR_holdings_import"
 output: html_notebook
 ---
 
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+```
+
+Now we will import the holdings information
+
+
 ```{r import_holding_function}
 importholdingclean <- function(ticker) {
   #combine ticker and location string to create location

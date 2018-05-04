@@ -42,7 +42,7 @@ spdr_tickers <- read_excel('raws/spdr_etfPerformance.xls', range = cell_cols("B"
 spdr_tickers
 ```
 
-Nowe we have tickers, write a function that will read the excel into the dataframe.
+Now we have tickers, write a function that will read the excel into the dataframe.
 
 ```{r import_function}
 importclean <- function(ticker) {
