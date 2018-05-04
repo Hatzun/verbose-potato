@@ -1,6 +1,8 @@
 ---
 title: "SPDR_holdings_import"
 output: html_notebook
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r initialize, message=FALSE, warning=FALSE}
@@ -12,22 +14,113 @@ library(stringr)
 
 Now we will import the holdings information
 
+first lets take a look at the file structure
+
+```{r}
+ACIM_holdings <- read_excel("etf_navs/ACIM_holdings.xls", skip = 3)
+ACIM_holdings
+```
+
+Same as before we need to clean for disclaimers and type conversions
+
+```{r}
+ACIM_holdings %>% 
+  filter(!is.na(Weight)) %>% 
+  modify_at(c(3,5), as.numeric)
+```
+
+Nice and tidy. Create the ticker index as before.
+
+```{r get_spdr_tickers}
+spdr_tickers <- read_excel('raws/spdr_etfPerformance.xls', range = cell_cols("B")) %>% 
+  filter(!is.na(TICKER)) 
+  
+spdr_tickers
+```
+
+The function to import the holdings information, modified from before. It needs to be modified for the fixed income holdings though, they have different formats
+
+```{r}
+SPAB_holdings <- read_excel("etf_navs/SPAB_holdings.xls", skip = 3)
+SPAB_holdings
+```
+
+
+```{r}
+colnames(SPAB_holdings)
+str_detect(colnames(SPAB_holdings), 'Coupon') %>% 
+  sum()
+
+```
+
 
 ```{r import_holding_function}
 importholdingclean <- function(ticker) {
   #combine ticker and location string to create location
-  location <- str_interp("etf_navs/${ticker}.xls")
+  location <- str_interp("etf_navs/${ticker}_holdings.xls")
   
+  print(str_c('Trying to import.....', ticker))
   #uses the location to read the excel file in the folder
   xls_file <- read_excel(location,skip = 3)
   
   #cleans the data, removes the disclaimers at the end and converts to numeric
-  xls_file <- xls_file %>% 
-    select(1:4) %>% 
-    filter(!is.na(Nav)) %>% 
-    mutate(Date = dmy(Date)) %>% 
-    modify_at(2:4, as.numeric)
-  
-  return(xls_file)
+  #checks first if the xls is for a bond ETF, print and move to next if it is.
+  if (sum(str_detect(colnames(xls_file), 'Coupon')) > 0) {
+    print(str_c(ticker, ' exception: is a bond ETF'))
+  } else if (length(colnames(xls_file)) != 5) {
+    print(str_c(ticker, ' exception: unexpected width'))
+  } else {
+    xls_file <- xls_file %>% 
+      filter(!is.na(Weight)) %>% 
+      modify_at(c(3,5), as.numeric) %>% 
+      rename(Shares_held = 'Shares Held')
+
+    return(xls_file)
+  }
 }
 ```
+
+see if it works
+
+```{r}
+importholdingclean('SPAB')
+```
+works fine
+
+this does not work for bond holdings though, because there are a different # of columns and format
+
+apply same logic as nav_history
+
+```{r import_all_holdings, message=FALSE, warning=FALSE, include=FALSE}
+spdr_holdings <- spdr_tickers %>%
+  pull(TICKER) %>% 
+  map(~importholdingclean(.x))
+```
+
+didn't crash this time
+
+```{r}
+spdr_total_holdings <- add_column(spdr_tickers, holdings = spdr_holdings)
+```
+
+put the two together and select only the equity etfs
+
+```{r}
+spdr_equity_holdings <- spdr_total_holdings %>% 
+  filter(str_detect(holdings, 'exception') == FALSE)
+```
+
+then unnest
+```{r}
+spdr_equity_holdings <- spdr_equity_holdings %>% 
+  unnest(holdings)
+```
+
+save it to a feather and we are done
+
+```{r}
+library(feather)
+write_feather(spdr_equity_holdings, "spdr_equity_holding.feather")
+
+```
+
