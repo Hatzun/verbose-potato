@@ -1,0 +1,21 @@
+---
+title: "ishares_import"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+```
+
+Time to import ishares data, they are contained in the same excel sheet
+
+lets get the tickers first
+
+```{r}
+ishares <- read_excel("raws/ishares.xls")
+ishares
+```
+
