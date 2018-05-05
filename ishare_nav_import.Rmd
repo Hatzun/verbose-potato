@@ -1,0 +1,76 @@
+---
+title: "ishare_nav_import"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+```
+
+lets get the tickers first again
+
+```{r}
+ishares <- read_excel("data/raws/ishare_us.xlsx")
+ishares
+```
+
+isolate them and convert to a mappable list structure
+
+```{r}
+names <- ishares %>% 
+  select(Ticker) %>% 
+  pull() 
+  
+names[1:6]
+```
+
+check out the history sheet
+
+```{r}
+etf_xls <- read_excel("data/ishares/AAXJ.xlsx", sheet = "Historical")
+etf_xls
+```
+
+```{r}
+importnavclean <- function(ticker) {
+  #take the name and interp into full location
+  location = str_glue('data/ishares/{ticker}.xlsx')
+  print(str_c('Trying to import.....', ticker))
+  
+  xls <- read_excel(location, sheet = "Historical", na = "--") %>% 
+    select(c(1:3,5))
+    
+  colnames(xls) <- str_replace_all(colnames(xls), " ", "_")
+  return(xls)
+}
+
+importnavclean('JKK')
+```
+
+```{r}
+ishare_nav <- names %>% 
+  map(~importnavclean(.x))
+```
+
+```{r}
+ishare_total_nav <- ishares %>% 
+  select(Ticker) %>%
+  add_column(nav = ishare_nav)
+```
+
+```{r}
+ishare_total_nav <- ishare_total_nav %>% 
+  unnest(nav) %>% 
+  modify_at(2, mdy)
+```
+
+write this out to a feather
+
+```{r}
+library(feather)
+write_feather(ishare_total_nav, "ishare_nav.feather")
+```
+
