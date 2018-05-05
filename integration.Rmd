@@ -1,0 +1,130 @@
+---
+title: "Nav/holding integration"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+library(knitr)
+```
+
+##Holdings
+
+Lets integrate the holdings by ticker first
+
+```{r}
+ishare.holdings <- read_feather("data/clean/ishare_holdings.feather")
+spdr.holdings <- read_feather("data/clean/spdr_equity_holding.feather")
+```
+
+reduce the variables in the ishares data and rearrange/rename it to match with the spdr data
+
+```{r}
+ish.matched <- ishare.holdings %>% 
+  select(c(1,3,2,5,7,10)) %>% 
+  rename(weight = 'Weight_(%)')
+
+colnames(ish.matched) <- str_to_lower(colnames(ish.matched))
+ish.matched
+```
+
+now rearrange the spdr data, and rearrange/rename it also
+
+```{r}
+spdr.matched <- spdr.holdings %>% 
+  select(c(1,2,3,4,6,5)) %>% 
+  rename(shares='Shares_held') %>% 
+  rename(id='Identifier')
+
+colnames(spdr.matched) <- str_to_lower(colnames(spdr.matched))
+spdr.matched
+```
+
+now bind them on top of each other
+
+```{r}
+combined.holdings <- bind_rows(ish.matched, spdr.matched)
+
+combined.holdings
+```
+
+```{r}
+write_feather(combined.holdings, "combined_holdings.feather")
+```
+
+time to take a look at the data
+
+```{r}
+combined.holdings %>% 
+  group_by(sector) %>% 
+  count() %>% 
+  arrange(desc(n))
+```
+
+Seems like there is a lot of consumer descretionary and financials
+
+```{r}
+combined.holdings %>% 
+  group_by(name) %>% 
+  count() %>% 
+  arrange(desc(n))
+```
+
+top few holdings are the treasury and cash fund of course, followed up some conglomerates.
+
+##NAV history
+
+Time to integrate the NAV histories together
+
+```{r}
+ish.nav <- read_feather('data/clean/ishare_nav.feather')
+sp.nav <- read_feather('data/clean/spdr_nav.feather')
+```
+
+```{r}
+tibble(colnames(ish.nav))
+```
+
+```{r}
+tibble(colnames(sp.nav))
+```
+
+lets mutate ishares data into total net assets, and then fix up the column names
+
+```{r}
+ish.m <- ish.nav %>% 
+  mutate(total = NAV_per_Share*Shares_Outstanding) %>% 
+  select(c(1,2,4,5,6))
+ish.m
+```
+
+```{r}
+sp.m <- sp.nav %>% 
+  rename(shares = `Shares Outstanding`) %>% 
+  rename(total = `Total Net Assets`)
+
+colnames(sp.m) <- str_to_lower(colnames(sp.m))
+sp.m
+```
+
+```{r}
+colnames(ish.m) <- colnames(sp.m)
+combined_nav <- bind_rows(ish.m, sp.m)
+combined_nav
+```
+
+
+```{r}
+write_feather(combined_nav, "data/clean/combined_nav.feather")
+```
+
+
+
+
+
+
+
