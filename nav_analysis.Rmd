@@ -1,0 +1,128 @@
+---
+title: "NAV analysis"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+```
+
+```{r}
+nav <- read_feather('data/clean/combined_nav.feather')
+```
+
+lets record their age
+
+```{r}
+nav_age <- nav %>% 
+  group_by(ticker) %>% 
+  mutate(age = (date-date[n()]))
+
+nav_age
+```
+
+create a column to measure standardized age, current age/max age
+
+```{r}
+nav_age <- nav_age %>% 
+  group_by(ticker) %>% 
+  mutate(age = as.numeric(as.duration(age), 'days')) %>% 
+  mutate(passed = (age/max(age)))
+nav_age
+```
+```{r}
+cduration <- function(x) {
+  time <- 1
+  y <- vector()
+  y[1] <- 0
+  for (i in seq_along(x)[2:length(x)]) {
+    if (x[[i]]==x[[i-1]]) {
+      y[i] <- 0
+      time <- time + 1
+    } else {
+      y[i] <- time
+      time <- 1
+    }
+  }
+  return(y)
+}
+```
+
+Let's remove all the NAs and then calculate the duration between changes in shares
+
+```{r}
+nav_age <- nav_age %>% 
+  group_by(ticker) %>% 
+  filter(!is.na(shares)) %>% 
+  mutate(cd = cduration(shares))
+```
+
+make a scatter plot to see if there is any relationship
+
+```{r eval=FALSE, include=FALSE}
+g <- nav_age %>% 
+  ungroup() %>% 
+  select(passed, cd) %>% 
+  filter(cd != 0) %>% 
+  ggplot(aes(x=passed, y=cd))
+
+g + geom_point()
+```
+
+Let's calculate the rolling monthly changes in shares
+
+```{r}
+rchange <- function(x) {
+  change <- vector()
+  for (i in seq_along(x)) {
+    if (i + 20 <= length(x)) {
+      change[i] <- x[i] - x[i+20]
+    } else {
+      change[i] <- 0
+    }
+  }
+  return(change)
+}
+```
+
+
+```{r}
+nav_age <- nav_age %>% group_by(ticker) %>% mutate(change = rchange(shares))
+nav_age
+```
+
+
+```{r}
+nav_age <- nav_age %>% ungroup()
+```
+
+```{r}
+nav_age %>% group_by(date) %>% filter(date=='2018-05-03') %>% summarise(tchange=sum(change))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,176 @@
+---
+title: "weekly_etf"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+options(scipen=999)
+library(magrittr)
+```
+
+```{r}
+eq <- read_feather('data/clean/us_holdings.feather')
+nav <- read_feather('data/clean/combined_nav.feather')
+price_history <- read_rds('data/clean/history.rds')
+```
+
+group the nav history into weekly periods instead
+
+```{r}
+monthly_nav <- nav %>% 
+  group_by(ticker, month=floor_date(date,"month")) %>% 
+  summarize(shares=mean(shares)) %>%
+  ungroup()
+
+monthly_nav
+```
+
+The change function
+
+```{r}
+rchange <- function(x) {
+  change <- vector()
+  for (i in seq_along(x)) {
+    if (i + 1 <= length(x)) {
+      change[i] <- x[i+1] - x[i]
+    } else {
+      change[i] <- 0
+    }
+  }
+  return(change)
+}
+```
+
+```{r}
+monthly_nav <- monthly_nav %>% 
+  group_by(ticker) %>% 
+  mutate(rc=rchange(shares))
+monthly_nav
+```
+
+```{r}
+map_change <- function(pair) {
+  dschg <- tibble()
+  p <- str_split(pair, " ", simplify = TRUE)
+  st <- p[[1]]
+  chg <- as.numeric(p[[2]])
+  dschg <- eq %>% 
+    filter(ticker==st) %>% 
+    mutate(pcw=(weight/100)*chg) %>% 
+    select(id,pcw)
+  return(dschg)
+}
+```
+
+```{r}
+hist <- monthly_nav %>% 
+  filter(rc!=0) %>% 
+  mutate(x=str_c(ticker,rc, sep=" ")) %>% 
+  mutate(stocks=map(x, ~map_change(.x)))
+```
+
+```{r}
+get_return <- function(dt,ticker) {
+  stdt <- dt
+  pd <- price_history %>% 
+    filter(id==ticker) %>% 
+    pull(history) %>% 
+    extract2(1)
+  
+  if (is.tibble(pd)) {
+    p_ret <- pd %>% 
+      filter(timestamp>=stdt&timestamp<=stdt+days(35)) %>% 
+      slice(1:30) %>% 
+      summarise(rt=(adjusted_close[20]-adjusted_close[1])/adjusted_close[1]) %>% 
+      pull(rt)
+  } else {
+    p_ret <- NA
+  }
+  return(p_ret)
+}
+```
+
+
+```{r}
+m_h <- hist %>% 
+  select(ticker,month, shares, rc, stocks) %>% 
+  group_by(month) %>% 
+  summarise(p=list(reduce(stocks,bind_rows))) %>% 
+  unnest(p) %>% 
+  group_by(month, id) %>% 
+  summarise(t=sum(pcw))
+```
+
+```{r}
+m_h <- m_h %>% 
+  ungroup() %>% 
+  group_by(month) %>%
+  filter(!is.na(t)) %>% 
+  mutate(rnk=rank(t))
+```
+
+
+```{r}
+m_top <- m_h %>% 
+  top_n(100,rnk)
+m_top
+```
+
+```{r}
+m_bot <- m_h %>%
+  top_n(-100,rnk)
+m_bot
+```
+
+
+```{r}
+m_bot$return <- 
+  map2(m_bot$month, m_bot$id, get_return) %>% 
+  flatten_dbl()
+```
+
+```{r}
+m_top$return <- 
+  map2(m_top$month, m_top$id, get_return) %>% 
+  flatten_dbl()
+```
+
+```{r}
+m_top %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  summarise(mean=mean(return))
+```
+
+```{r}
+m_bot %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  summarise(mean=mean(return))
+```
+
+```{r}
+m_bot <- m_bot %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  group_by(month) %>% 
+  summarise(ra=mean(return))
+
+m_top <- m_top %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  group_by(month) %>% 
+  summarise(ra=mean(return))
+```
+
+```{r}
+pstat <- m_t %>% tq_performance(Ra=r, Rb=NULL, performance_fun= table.Stats)
+
+kable(t(pstat))
+```
+

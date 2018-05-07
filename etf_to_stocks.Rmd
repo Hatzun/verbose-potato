@@ -1,0 +1,192 @@
+---
+title: "ETF to stock flows"
+output:
+  html_notebook: default
+  word_document: default
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+options(scipen=999)
+library(magrittr)
+```
+
+
+```{r}
+eq <- read_feather('data/clean/us_holdings.feather')
+nav <- read_feather('data/clean/combined_nav.feather')
+price_history <- read_rds('data/clean/history.rds')
+```
+
+Add the rolling changes to nav
+
+```{r}
+rchange <- function(x) {
+  change <- vector()
+  for (i in seq_along(x)) {
+    if (i + 4 <= length(x)) {
+      change[i] <- x[i] - x[i+4]
+    } else {
+      change[i] <- 0
+    }
+  }
+  return(change)
+}
+```
+
+compute the change in the last 5 days
+```{r}
+nav_c <- nav %>% group_by(ticker) %>% mutate(change = rchange(shares))
+View(nav_c)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+nav[,1:100] %>% mutate(week=isoweek(date), year=isoyear(date)) %>% group_by(year, week) %>% mutate(wd = max(date))
+```
+
+write a function for the summarise function that produces a tibble for each date
+
+```{r}
+map_change <- function(pair) {
+  dschg <- tibble()
+  p <- str_split(pair, " ", simplify = TRUE)
+  st <- p[[1]]
+  chg <- as.numeric(p[[2]])
+  dschg <- eq %>% 
+    filter(ticker==st) %>% 
+    mutate(pcw=(weight/100)*chg) %>% 
+    select(id,pcw)
+  return(dschg)
+}
+```
+
+
+```{r}
+sample <- nav_c %>% 
+  filter(date>=dmy("01-01-2017")) %>% 
+  filter(change!=0) %>% 
+  mutate(x=str_c(ticker,change, sep=" ")) %>% 
+  mutate(stocks=map(x, ~map_change(.x)))
+```
+
+
+```{r}
+hist <- nav_c %>% 
+  filter(change!=0) %>% 
+  mutate(x=str_c(ticker,change, sep=" ")) %>% 
+  mutate(stocks=map(x, ~map_change(.x)))
+```
+
+unpack 
+```{r}
+sample %>% 
+  unnest(y) %>% 
+  filter(pcw!=0) %>% 
+  group_by(date, id) %>% 
+  summarise(t=sum(pcw))
+```
+
+
+
+```{r}
+m_h <- hist %>% 
+  select(ticker,date, shares, change, stocks) %>% 
+  group_by(date) %>% 
+  summarise(p=list(reduce(stocks,bind_rows))) %>% 
+  unnest(p) %>% 
+  group_by(date, id) %>% 
+  summarise(t=sum(pcw))
+```
+
+```{r}
+m_h <- m_h %>% 
+  ungroup() %>% 
+  group_by(date) %>%
+  filter(!is.na(t)) %>% 
+  mutate(rnk=rank(t))
+```
+
+find the top and bot 5
+
+```{r}
+m_top <- m_h %>% 
+  top_n(100,rnk)
+m_top
+```
+```{r}
+m_bot <- m_h %>%
+  top_n(-100,rnk)
+m_bot
+```
+
+function to find returns
+
+```{r}
+get_return <- function(dt,ticker) {
+  stdt <- dt
+  pd <- price_history %>% 
+    filter(id==ticker) %>% 
+    pull(history) %>% 
+    extract2(1)
+  
+  if (is.tibble(pd)) {
+    p_ret <- pd %>% 
+      filter(timestamp>=stdt&timestamp<=stdt+days(10)) %>% 
+      slice(1:5) %>% 
+      summarise(rt=(adjusted_close[5]-adjusted_close[1])/adjusted_close[1]) %>% 
+      pull(rt)
+  } else {
+    p_ret <- NA
+  }
+  return(p_ret)
+}
+```
+
+use the map2 function to go over the top and bottom stocks and retrieve the returns from price_history
+
+```{r}
+m_bot$return <- 
+  map2(m_bot$date, m_bot$id, get_return) %>% 
+  flatten_dbl()
+```
+
+```{r}
+m_top$return <- 
+  map2(m_top$date, m_top$id, get_return) %>% 
+  flatten_dbl()
+```
+
+```{r}
+m_top %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  summarise(mean=mean(return))
+```
+```{r}
+m_bot %>% 
+  filter(!is.na(return)) %>% 
+  ungroup() %>% 
+  summarise(mean=mean(return))
+```
+
+```{r}
+m_bot_daily <- m_bot %>% filter(!is.na(return)) %>% summarise(ra=mean(return))
+m_top_daily <- m_top %>% filter(!is.na(return)) %>% summarise(ra=mean(return))
+```
+
+
+```{r}
+m_t <- tibble(date=m_bot_daily$date, return=(m_top_daily$ra-m_bot_daily$ra))
+```
+
+```{r}
+pstat <- m_t %>% tq_performance(Ra=return, Rb=NULL, performance_fun= table.Stats)
+
+kable(t(pstat))
+```
+

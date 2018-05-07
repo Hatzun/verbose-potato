@@ -1,0 +1,103 @@
+---
+title: "Holdings and price information"
+output: html_notebook
+---
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+```
+
+Let's take a look at the holdings data.
+
+```{r}
+hs <- read_feather('data/clean/combined_holdings.feather')
+hs
+```
+
+let's take a look at the stocks in the etfs
+
+```{r}
+hs %>% 
+  group_by(id) %>% 
+  select(2:3) %>% 
+  count(id) %>% 
+  arrange(desc(n))
+```
+
+So there are a total of 10,623 entries, but there are quite a bunch of them that are not stocks. For example the top few here are treasury/cash.
+
+
+```{r}
+stocks <- hs %>% 
+  select(id) %>% 
+  distinct()
+stocks
+```
+
+```{r}
+stocks %>% 
+  filter(str_detect(id, "[\\d-]+")==TRUE)
+```
+
+6,411 of them are foreign stocks, so let's remove those
+
+```{r}
+fs <- stocks %>% 
+  filter(str_detect(id, '[\\d-]+')!=TRUE) %>% 
+  pull(id)
+fs[1:5]
+```
+
+let's see what these symbols are to make sure they are stocks
+
+```{r}
+hs %>% 
+  filter(id%in%fs) %>% 
+  group_by(id) %>% 
+  count(name) %>% 
+  group_by(id) %>% 
+  count(id) %>% 
+  filter(nn>1) %>% 
+  arrange(desc(nn))
+```
+
+```{r}
+hs_filtered <- hs %>% 
+  filter(id%in%fs)
+```
+
+There are a few etfs that have duplicate stock entries in them, we have to clean those
+
+```{r}
+hs_filtered %>% 
+  group_by(ticker, id) %>% 
+  summarise(n=n()) %>% 
+  filter(n==2) %>% 
+  arrange(desc(n))
+```
+
+mainly, MDY got imported twice so we need to fix these
+
+```{r}
+hs_filtered <- hs_filtered %>% filter(ticker!='MDY') %>% bind_rows(mdy)
+hs_filtered
+```
+
+then replace the names so they are all the same
+
+```{r}
+hs_filtered <- hs_filtered %>% 
+  group_by(id) %>% 
+  mutate(name=(name[1]))
+```
+
+save this data real quick
+
+```{r}
+write_feather(hs_filtered, 'data/clean/us_holdings.feather')
+```
+

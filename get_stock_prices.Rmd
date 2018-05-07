@@ -1,0 +1,62 @@
+---
+title: "Stock price history"
+output: html_notebook
+---
+
+AlphaVantage key = WGWYE1DPA8TEONG7
+
+```{r initialize, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(feather)
+library(quantmod)
+```
+
+```{r}
+eq <- read_feather('data/clean/us_holdings.feather')
+nav <- read_feather('data/clean/combined_nav.feather')
+```
+
+find the earliest date by looking at the inception date for each fund and finding the eariliest applicable date for each stock
+
+```{r}
+incep <- nav %>% 
+  group_by(ticker) %>% 
+  summarise(earliest = min(date))
+
+eq <- eq %>% 
+  left_join(incep, by='ticker')
+View(eq)
+```
+
+```{r}
+eq %>% 
+  group_by(id) %>%
+  summarise(start = min(earliest))
+```
+
+prepare stock ids for use in alphavantager
+
+```{r}
+stock_ids <- eq %>% 
+  distinct(id) %>% 
+  pull(id)
+```
+
+```{r}
+results=list()
+for (i in seq(101, 4207)){
+  results[[i]] <- tq_get(stock_ids[i], get='alphavantager', av_fun='TIME_SERIES_DAILY_ADJUSTED', outputsize='full')
+  print(stock_ids[i])
+  Sys.sleep(1)
+}
+```
+
+
+```{r}
+write_rds(results, 'results.rds')
+write_rds(hist, 'data/clean/history.rds')
+```
+

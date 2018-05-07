@@ -119,9 +119,20 @@ combined_nav
 
 
 ```{r}
-write_feather(combined_nav, "data/clean/combined_nav.feather")
+created <- combined_nav %>% 
+  group_by(ticker) %>% 
+  summarise(date = min(date))
+
+created$date <- created$date - days(1)
+
+created <- created %>% mutate(nav=0, shares=0, total=0)
+
+combined_nav <- bind_rows(combined_nav, created)
 ```
 
+```{r}
+write_feather(combined_nav, "data/clean/combined_nav.feather")
+```
 
 
 
